@@ -1,0 +1,7 @@
+vsim work.datapathc
+add wave *
+force -freeze sim:/datapathc/clk 1 0, 0 {50 ps} -r 100
+force -freeze sim:/datapathc/reset 0 0 -cancel 50
+run
+run
+run

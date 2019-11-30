@@ -1,0 +1,567 @@
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+
+entity datapathc is
+	port(
+		clk : in std_logic;
+		reset : in std_logic;
+		PCout  : out std_logic_vector(15 downto 0);
+		R0	  : out std_logic_vector(15 downto 0);
+		R1	  : out std_logic_vector(15 downto 0);
+		R2	  : out std_logic_vector(15 downto 0);
+		R3	  : out std_logic_vector(15 downto 0);
+		R4	  : out std_logic_vector(15 downto 0);
+		R5	  : out std_logic_vector(15 downto 0);
+		R6	  : out std_logic_vector(15 downto 0)
+	);
+end entity datapathc;
+
+architecture behav of datapathc is
+	constant ADD: std_logic_vector(3 downto 0) := "0000";
+	constant ADI: std_logic_vector(3 downto 0) := "0001";
+	constant NND: std_logic_vector(3 downto 0) := "0010";
+	constant LHI: std_logic_vector(3 downto 0) := "0011";
+	constant LW:  std_logic_vector(3 downto 0) := "0100";
+	constant SW:  std_logic_vector(3 downto 0) := "0101";
+	constant LM:  std_logic_vector(3 downto 0) := "0110";
+	constant SM:  std_logic_vector(3 downto 0) := "0111";
+	constant BEQ: std_logic_vector(3 downto 0) := "1100";
+	constant JAL: std_logic_vector(3 downto 0) := "1000";
+	constant JLR: std_logic_vector(3 downto 0) := "1001";
+	constant R7:  std_logic_vector(2 downto 0) := "111";
+	signal PCin            : std_logic_vector(15 downto 0);
+	signal PC              : std_logic_vector(15 downto 0);
+	signal wPC             : std_logic;
+	signal Iout            : std_logic_vector(15 downto 0);
+	signal IR_IF           : std_logic_vector(15 downto 0);
+	signal valid_IF 	   : std_logic;
+	signal valid_ID        : std_logic;
+	signal valid_RR        : std_logic;
+	signal valid_EX        : std_logic;
+	signal valid_MA        : std_logic;
+	signal A1_ID           : std_logic_vector(2 downto 0);
+	signal A2_ID           : std_logic_vector(2 downto 0);
+	signal Aw_ID           : std_logic_vector(2 downto 0);
+	signal Aw_RR           : std_logic_vector(2 downto 0);
+	signal Aw_EX           : std_logic_vector(2 downto 0);
+	signal Aw_MA           : std_logic_vector(2 downto 0);
+	signal outA            : std_logic_vector(15 downto 0);
+	signal outB            : std_logic_vector(15 downto 0);
+	signal forwarded_data_1: std_logic_vector(15 downto 0);
+	signal forwarded_data_2: std_logic_vector(15 downto 0);
+	signal write           : std_logic_vector(15 downto 0);
+	signal wSel            : std_logic_vector(2 downto 0);
+	signal Reg_wr_MA       : std_logic;
+	signal wEN             : std_logic;
+	signal Addr_EX         : std_logic_vector(15 downto 0);
+	signal D_EX            : std_logic_vector(15 downto 0);
+	signal wRAM            : std_logic;
+	signal RAMout          : std_logic_vector(15 downto 0);
+	signal eq              : std_logic;
+	signal opcode          : std_logic_vector(3 downto 0);
+	signal opcode_ID       : std_logic_vector(3 downto 0);
+	signal opcode_RR       : std_logic_vector(3 downto 0);
+	signal opcode_EX       : std_logic_vector(3 downto 0);
+	signal PC_ID           : std_logic_vector(15 downto 0);
+	signal ALUop           : std_logic;
+	signal SE_ID           : std_logic_vector(15 downto 0);
+	signal SEa_ID          : std_logic;
+	signal SE_RR           : std_logic_vector(15 downto 0);
+	signal SEa_RR          : std_logic;
+	signal D2              : std_logic_vector(15 downto 0);
+	signal ALU_A           : std_logic_vector(15 downto 0);
+	signal ALU_B           : std_logic_vector(15 downto 0);
+	signal ALU_Y           : std_logic_vector(15 downto 0);
+	signal C               : std_logic;
+	signal Z               : std_logic;
+	signal C_var           : std_logic;
+	signal Z_var           : std_logic;
+	signal CZ_ID           : std_logic_vector(1 downto 0);
+	signal Cmod_ID         : std_logic;
+	signal Zmod_ID         : std_logic;
+	signal Cmod_RR 		   : std_logic;
+	signal Zmod_RR 		   : std_logic;
+	signal C_mod_var       : std_logic;
+	signal Z_mod_var       : std_logic;
+	signal Zout            : std_logic;
+	signal lw_flag_update  : std_logic;
+	signal Z_LWvar		   : std_logic;
+	signal D_MA            : std_logic_vector(15 downto 0);
+	signal D_EXvar         : std_logic_vector(15 downto 0);
+	signal PCcompute_ID    : std_logic;
+	signal PCstore_ID      : std_logic;
+	signal PCstore_RR      : std_logic;
+	signal IF_en           : std_logic;
+	signal ID_en           : std_logic;
+	signal RR_en           : std_logic;
+	signal Reg_wr_ID       : std_logic;
+	signal Reg_wr_RR       : std_logic;
+	signal CZ_RR           : std_logic_vector(1 downto 0);
+	signal PC_IF           : std_logic_vector(15 downto 0);
+	signal haz_lwlm_r7     : std_logic;
+	signal haz_beq         : std_logic;
+	signal haz_jal_ex      : std_logic;
+	signal haz_Ex_r7       : std_logic;
+	signal haz_load_dep    : std_logic;
+	signal haz_lw_zero_dep : std_logic;
+	signal haz_jlr_ex	   : std_logic;
+	signal haz_lhi_r7 	   : std_logic;
+	signal flush_ID        : std_logic;
+	signal flush_RR        : std_logic;
+	signal flush_Ex        : std_logic;
+	signal flush_MA        : std_logic;
+	signal lw_stall,lmsm_stall: std_logic;
+	signal D_MAvar         : std_logic_vector(15 downto 0);
+	signal Reg_wr_Ex       : std_logic;
+	signal Reg_wr_Exvar    : std_logic;
+	signal wenvar 		   : std_logic;
+	signal SE6 			   : std_logic_vector(15 downto 0);
+	signal PC_inc 		   : std_logic_vector(15 downto 0);
+	signal ALU_op_RR	   : std_logic;
+	signal lmsm_write 	   : std_logic;
+	signal lmsm_state      : std_logic;
+	signal lmsm_run 	   : std_logic;
+	signal lmsm_sel 	   : std_logic;
+	signal some_sig 	   : std_logic;
+	signal some_sig2,lmsm_locations : std_logic_vector(7 downto 0);
+	signal lmsm_initial_address : std_logic_vector(15 downto 0);
+	signal temp1,temp2,temp3,lmsm_locations_next : std_logic_vector(7 downto 0);
+	signal temp4 		   : std_logic_vector(2 downto 0);
+	signal valid_IDvar 	   : std_logic;
+	signal valid_EXvar 	   : std_logic;
+	signal valid_RRvar 	   : std_logic;
+	signal valid_MAvar 	   : std_logic;
+	signal LS7             : std_logic_vector(15 downto 0);
+	signal load_type_ID	   : std_logic;
+	signal load_type_RR	   : std_logic;
+	signal load_type_Ex	   : std_logic;
+	signal PC_RR           : std_logic_vector(15 downto 0);
+	signal outA_RR         : std_logic_vector(15 downto 0);
+	signal outB_RR         : std_logic_vector(15 downto 0);
+	signal lmsm_sel_RR	   : std_logic;
+	signal lmsm_write_RR   : std_logic;
+	signal PCcompute_RR    : std_logic;
+	signal A1_RR 		   : std_logic_vector(2 downto 0);
+	signal A2_RR 		   : std_logic_vector(2 downto 0);
+	signal rst : std_logic;
+begin
+	rst <= not reset;
+	-- Instruction Fetch ---------------------------------------------------------------------------------------
+	PCout <= PC;
+	rom : entity work.ROM_memory
+		port map(
+			address     => PC,
+			Mem_dataout => Iout
+		);
+
+	IF_PP : process(clk, rst, IF_en,Iout) is
+	begin
+		if rst = '1' then
+			PC_IF <= (others => '0');
+			IR_IF <= (others => '0');
+			valid_IF <= '0';
+		elsif rising_edge(clk) and IF_en = '1' then
+			PC_IF <= PC;
+			IR_IF <= Iout;
+			valid_IF<= '1';
+		end if;
+	end process IF_PP;
+
+	-- Instruction Decode -------------------------------------------------------------------------------------
+	opcode <= IR_IF(15 downto 12);
+	SE6	<= std_logic_vector(resize(signed(IR_IF(5 downto 0)), 16));
+	LS7(15 downto 7) <= IR_IF(8 downto 0);
+	LS7(6 downto 0)  <= (others => '0');
+	valid_IDvar <= valid_IF and flush_ID;
+		---- Used in LM/SM
+	some_sig2 <= lmsm_locations when some_sig='1'
+			else IR_IF(7 downto 0);
+	temp1 <= std_logic_vector(unsigned(some_sig2)-1);
+	temp2 <= (temp1 XOR some_sig2);
+	temp3 <= temp2 and some_sig2;
+	temp4 <=	 "000" when temp3="00000001"
+			else "001" when temp3="00000010"
+			else "010" when temp3="00000100"
+			else "011" when temp3="00001000"
+			else "100" when temp3="00010000"
+			else "101" when temp3="00100000"
+			else "110" when temp3="01000000"
+			else "111";
+	lmsm_locations_next <= some_sig2 and temp1;
+	lmsm_run  <= '0' when (opcode(3 downto 1)="011" and valid_IF='1') and (lmsm_locations_next="00000000" or IR_IF(7 downto 0)="00000000")
+			else '1';
+		-------------------
+	ID_PP : process(clk, rst, ID_en) is
+	begin
+		if rst = '1' then
+			PC_ID     <= (others => '0');
+			A1_ID     <= "000";
+			A2_ID     <= "000";
+			Aw_ID     <= "000";
+			SE_ID     <= (others => '0');
+			SEa_ID    <= '0';
+			CZ_ID     <= "00";
+			ALUop     <= '0';
+			Cmod_ID   <= '0';
+			Zmod_ID   <= '0';
+			opcode_ID <= (others => '0');
+			PCstore_ID   <= '0';
+			PCcompute_ID <= '0';
+			valid_ID  <= '0';
+			Reg_wr_ID <= '0';
+			lmsm_write<= '0';
+			lmsm_sel  <= '0';
+			lmsm_locations <= (others => '0');
+			lmsm_state<= '0';
+			some_sig  <= '0';
+			load_type_ID<= '0';
+		elsif rising_edge(clk) and ID_en = '1' then
+			PC_ID        <= PC_IF;
+			A1_ID        <= "000";
+			A2_ID        <= "000";
+			Aw_ID        <= "000";
+			SE_ID        <= (others => '0');
+			SEa_ID       <= '0';
+			CZ_ID        <= "00";
+			ALUop        <= '0';
+			Cmod_ID      <= '0';
+			Zmod_ID      <= '0';
+			opcode_ID    <= opcode;
+			PCstore_ID   <= '0';
+			PCcompute_ID <= '0';
+			valid_ID     <= valid_IDvar;
+			Reg_wr_ID    <= '0';
+			lmsm_write	 <= '0';
+			lmsm_sel	 <= '0';
+			load_type_ID <= '0';
+			case opcode is
+				when ADD =>
+					A1_ID     <= IR_IF(11 downto 9);
+					A2_ID     <= IR_IF(8 downto 6);
+					Aw_ID     <= IR_IF(5 downto 3);
+					CZ_ID     <= IR_IF(1 downto 0);
+					Cmod_ID   <= '1';
+					Zmod_ID   <= '1';
+					Reg_wr_ID <= '1';
+				when ADI =>
+					A1_ID     <= IR_IF(11 downto 9);
+					SE_ID     <= SE6;
+					SEa_ID    <= '1'; --ALU B control
+					Aw_ID     <= IR_IF(8 downto 6);
+					Cmod_ID   <= '1';
+					Zmod_ID   <= '1';
+					Reg_wr_ID <= '1';
+				when NND =>
+					A1_ID     <= IR_IF(11 downto 9);
+					A2_ID     <= IR_IF(8 downto 6);
+					Aw_ID     <= IR_IF(5 downto 3);
+					ALUop     <= '1';
+					CZ_ID     <= IR_IF(1 downto 0);
+					Zmod_ID   <= '1';
+					Reg_wr_ID <= '1';
+				when LHI =>
+					Aw_ID     <= IR_IF(11 downto 9);
+					SE_ID 	  <= LS7;		
+					SEa_ID	  <= '1';
+					Reg_wr_ID <= '1';
+				when LW =>
+					A1_ID     <= IR_IF(8 downto 6);
+					Aw_ID     <= IR_IF(11 downto 9);
+					SE_ID     <= SE6;
+					SEa_ID    <= '1';
+					Reg_wr_ID <= '1';
+					load_type_ID<= '1';
+				when SW =>
+					A1_ID   <= IR_IF(8 downto 6); -- regB
+					A2_ID  	<= IR_IF(11 downto 9); -- regA
+					SE_ID  	<= SE6;
+					SEa_ID 	<= '1';
+				when LM =>
+					Reg_wr_ID<='1';
+					Aw_ID<= temp4;
+					SE_ID<=std_logic_vector(resize(unsigned(temp4), 16));
+					SEa_ID<='1';
+					lmsm_locations<=lmsm_locations_next;
+					load_type_ID<= '1';
+					if(lmsm_state='0') then
+						lmsm_locations <= lmsm_locations_next;
+						lmsm_write <= '1';
+						lmsm_state <= '1';
+						A1_ID <= IR_IF(11 downto 9);
+						some_sig<='1';
+						if(lmsm_stall='0') then
+							lmsm_state<='0';
+							some_sig<='0';
+							if(IR_IF(7 downto 0)="00000000") then
+								valid_ID <= '0';
+							end if;
+						end if;
+					else
+						lmsm_sel<='1';
+						if(lmsm_stall='0') then
+							lmsm_state <= '0';
+							some_sig   <= '0';
+						end if;
+					end if;
+				when SM =>
+					opcode_ID <= SW; -- SW and Mem_write address generated in MA stage itself according to SW opcode
+					lmsm_locations <= lmsm_locations_next;
+					SE_ID<=std_logic_vector(resize(unsigned(temp4), 16));
+					SEa_ID<='1';
+					A2_ID<= temp4;
+					if(lmsm_state='0') then
+						lmsm_write <= '1';
+						lmsm_state <= '1';
+						A1_ID <= IR_IF(11 downto 9);
+						some_sig <= '1';
+						if(lmsm_stall='0') then
+							lmsm_state<='0';
+							some_sig <= '0';
+							if(IR_IF(7 downto 0)="00000000") then
+								valid_ID <= '0';
+							end if;
+						end if;
+					else
+						lmsm_sel<='1';
+						if(lmsm_stall='0') then
+							lmsm_state <= '0';
+							some_sig<='0';
+						end if;
+					end if;
+				when BEQ =>
+					A1_ID        <= IR_IF(11 downto 9);
+					A2_ID        <= IR_IF(8 downto 6);
+					PCcompute_ID <= '1'; -- ALU Ctrl-A
+					SE_ID        <= SE6;
+					SEa_ID       <= '1';
+				when JAL =>
+					PCcompute_ID <= '1';
+					SE_ID        <= std_logic_vector(resize(signed(IR_IF(8 downto 0)), 16));
+					SEa_ID       <= '1';
+					PCstore_ID   <= '1';
+					Aw_ID        <= IR_IF(11 downto 9);
+					Reg_wr_ID    <= '1';
+				when JLR =>
+					PCstore_ID <= '1';
+					Aw_ID      <= IR_IF(11 downto 9);
+					A1_ID      <= IR_IF(8 downto 6);
+					Reg_wr_ID  <= '1';
+				when others => null;
+			end case;
+
+		end if;
+	end process ID_PP;
+	-- Register Read access -----------------------------------------------------------------------------------
+	rf : entity work.register_file
+		port map(
+			clk   => clk,
+			rst	=> rst,
+			outA  => outA,
+			selA  => A1_ID,
+			outB  => outB,
+			selB  => A2_ID,
+			write => write,
+			wSel  => wSel,
+			wEN   => wEN,
+			PCin  => PCin,
+			PCout => PC,
+			wPC   => wPC,
+			R0	  => R0,
+			R1	  => R1,
+			R2	  => R2,
+			R3	  => R3,
+			R4	  => R4,
+			R5	  => R5,
+			R6	  => R6
+		);
+	valid_RRvar <= valid_ID and flush_RR;
+	RR_PP : process(clk, rst,RR_en) is
+	begin
+		if rst = '1' then
+			PC_RR 	   <= (others => '0');
+			Aw_RR      <= "000";
+			SE_RR      <= (others => '0');
+			SEa_RR     <= '0';
+			opcode_RR  <= (others => '0');
+			PCstore_RR <= '0';
+			valid_RR   <= '0';
+			Reg_wr_RR  <= '0';
+			CZ_RR      <= "00";
+			ALU_op_RR  <= '0';
+			Cmod_RR	   <= '0';
+			Zmod_RR    <= '0';
+			load_type_RR<= '0';
+			lmsm_sel_RR <= '0';
+			outA_RR		<= (others => '0');
+			outB_RR		<= (others => '0');
+			lmsm_write_RR<= '0';
+			A1_RR		<= "000";
+			A2_RR 		<= "000";
+			PCcompute_RR<= '0';
+		elsif rising_edge(clk) and RR_en = '1' then
+			PC_RR 	   <= PC_ID;
+			Aw_RR      <= Aw_ID;
+			SE_RR      <= SE_ID;
+			SEa_RR     <= SEa_ID;
+			opcode_RR  <= opcode_ID;
+			PCstore_RR <= PCstore_ID;
+			valid_RR   <= valid_RRvar;
+			Reg_wr_RR  <= Reg_wr_ID;
+			CZ_RR      <= CZ_ID;
+			ALU_op_RR  <= ALUop;
+			Cmod_RR	   <= Cmod_ID;
+			Zmod_RR	   <= Zmod_ID;
+			load_type_RR<= load_type_ID;
+			outA_RR		<= outA;
+			outB_RR		<= outB;
+			lmsm_write_RR<= lmsm_write;
+			lmsm_sel_RR <= lmsm_sel;
+			A1_RR		<= A1_ID;
+			A2_RR 		<= A2_ID;
+			PCcompute_RR<=PCcompute_ID;
+		end if;
+	end process RR_PP;
+	-- Instruction Execute ------------------------------------------------------------------------------------
+	forwarded_data_1 <= D_MAvar when (A1_RR = Aw_EX) and Reg_wr_Ex = '1' and valid_EX = '1'
+	               else D_MA when (A1_RR = Aw_MA) and Reg_wr_MA = '1' and valid_MA = '1'
+	        	   else outA_RR;
+	forwarded_data_2 <= D_MAvar when (A2_RR = Aw_EX) and Reg_wr_Ex = '1' and valid_EX = '1'
+	       		   else D_MA when (A2_RR = Aw_MA) and Reg_wr_MA = '1' and valid_MA = '1'
+	      		   else outB_RR;
+		-- Priority: MA>WB>RR
+	D2 <=    PC_RR when (A2_RR = R7 or PCstore_RR = '1')
+        else forwarded_data_2;
+    eq <= '1' when forwarded_data_1 = forwarded_data_2 else '0'; -- for BEQ
+	ALU_A <= PC_RR when (A1_RR = R7 or PCcompute_RR = '1')
+		else lmsm_initial_address when lmsm_sel_RR='1'
+	    else forwarded_data_1;
+	ALU_B <= SE_RR when SEa_RR = '1'
+	         else D2;
+	alu : entity work.ALU
+		port map(
+			A          => ALU_A,
+			B          => ALU_B,
+			Y          => ALU_Y,
+			ALU_opcode => ALU_op_RR,
+			Z_var      => Z_var,
+			C_var      => C_var
+		);
+	--Addr_EXvar   <= ALU_Y;
+	D_EXvar      <= D2 when opcode_RR = SW or PCstore_RR = '1' -- SW or JAL/JLR
+	                else SE_RR when opcode_RR = LHI -- LHI
+	                else ALU_Y;
+	---- for ADC/ADZ/NDC/NDZ
+	C_mod_var    <= '0' when (CZ_RR = "10" and C = '0') else '1';
+	Z_mod_var    <= '0' when (CZ_RR = "01" and Z = '0') else '1';
+	Reg_wr_Exvar <= Reg_wr_RR and C_mod_var and Z_mod_var;
+	Z_LWvar <= '1' when (D_MAvar = "0000000000000000")
+		  else '0';
+	Zout<= Z_LWvar when lw_flag_update='1'
+	  else Z_var;
+	-----
+	valid_EXvar <= valid_RR and flush_Ex;
+	EX_PP : process(clk, rst) is
+	begin
+		if rst = '1' then
+			C         <= '0';
+			Z         <= '0';
+			D_EX      <= (others => '0');
+			Addr_EX   <= (others => '0');
+			opcode_EX <= (others => '0');
+			valid_EX  <= '0';
+			Reg_wr_Ex <= '0';
+			Aw_EX	  <= "000";
+			load_type_Ex<= '0';
+			lmsm_initial_address<=(others => '0');
+		elsif rising_edge(clk) then
+			if (Cmod_RR = '1' and C_mod_var = '1' and valid_RR='1') then
+				C <= C_var;
+			end if;
+			if (Zmod_RR = '1' and Z_mod_var = '1' and valid_RR='1') or lw_flag_update = '1' then
+				Z <= Zout;
+			end if;
+			if(lmsm_write_RR='1') then
+				lmsm_initial_address <= forwarded_data_1;
+			end if;
+			D_EX      <= D_EXvar;
+			Addr_EX   <= ALU_Y;
+			Aw_EX     <= Aw_RR;
+			opcode_EX <= opcode_RR;
+			valid_EX  <= valid_EXvar;
+			Reg_wr_Ex <= Reg_wr_Exvar;
+			load_type_Ex<=load_type_RR;
+		end if;
+	end process EX_PP;
+
+	-- Memory access ------------------------------------------------------------------------------------------
+	ram : entity work.RAM_data
+		port map(
+			address     => Addr_EX,
+			RAM_datain  => D_EX,
+			clk         => clk,
+			rst 		=> rst,
+			RAM_wr		=> wRAM,
+			RAM_dataout => RAMout
+		);
+	D_MAvar <= RAMout when load_type_Ex='1' -- LW/LM
+	      else D_EX;
+
+	wRAM  <= '1' when opcode_EX = SW and valid_EX = '1' -- SW
+	    else '0';
+
+	valid_MAvar <= valid_EX and flush_MA;
+	MA_PP : process(clk, rst) is
+	begin
+		if rst = '1' then
+			Aw_MA     <= (others => '0');
+			D_MA      <= (others => '0');
+			valid_MA  <= '0';
+			Reg_wr_MA <= '0';
+		elsif rising_edge(clk) then
+			D_MA      <= D_MAvar;
+			Aw_MA     <= Aw_EX;
+			valid_MA  <= valid_MAvar;
+			Reg_wr_MA <= Reg_wr_Ex;
+		end if;
+	end process MA_PP;
+	-- Register Write Back -------------------------------------------------------------------------------------
+	write <= D_MA;
+	wSel  <= Aw_MA;
+	wENvar<= Reg_wr_MA and valid_MA;
+	wEN   <= wenvar;
+	--- PC Write
+	PC_inc  <= std_logic_vector(unsigned(PC)+1);
+	PCin  <= D_MAvar when haz_lwlm_r7='1' -- priority given to hazards at farthest stage
+		else D_EXvar when haz_Ex_r7='1'
+		else ALU_Y   when haz_beq='1' or haz_jal_ex='1'
+		else forwarded_data_1 when haz_jlr_ex='1'
+		else LS7 when haz_lhi_r7 = '1'
+		else PC_inc;
+	wPC   <= not (lw_stall or lmsm_stall);
+	----Hazard logic -------------------------------------------------------------------------------------------
+	haz_lwlm_r7     <= '1' when (load_type_Ex='1' and Aw_EX = R7 and valid_EX = '1') else '0'; -- LW/LM R7 detected from MA stage
+	haz_beq         <= '1' when (opcode_RR = BEQ and eq = '1' and valid_RR = '1') else '0'; -- BEQ taken;
+	haz_jal_ex      <= '1' when (opcode_RR = JAL and valid_RR = '1') else '0'; -- JAL at Ex stage
+	haz_Ex_r7       <= '1' when (load_type_RR='0' and valid_RR = '1' and Reg_wr_Exvar = '1' and Aw_RR = R7) else '0'; -- EX stage writing to R7
+	haz_load_dep    <= '1' when (load_type_Ex='1' and (A1_RR = Aw_EX or A2_RR = Aw_EX) and Reg_wr_Ex = '1' and valid_EX = '1') else '0'; -- LW(at Mem) followed by dependency(at Ex)
+	haz_lw_zero_dep <= '1' when (opcode_RR = LW and  CZ_ID = "01" and valid_RR = '1') else '0'; -- ADZ/NDZ at RR stage dependent on LW(at Ex stage)
+	haz_jlr_ex		<= '1' when (opcode_RR = JLR and valid_RR = '1') else '0'; -- JLR at RR stage, data forwarded to PC
+	haz_lhi_r7		<= '1' when (opcode = LHI and IR_IF(11 downto 9)=R7 and valid_IF='1') else '0'; -- LHI R7, data transferred to PC at decode stage itself
+	----Flushes ------------------------------------------------------------------------------------------------
+	flush_ID        <= '0' when haz_Ex_r7 = '1' or haz_beq = '1' or haz_lwlm_r7 = '1' or haz_jlr_ex = '1' or haz_lhi_r7 = '1'
+	                   or (opcode(3 downto 1) = "100" and IR_IF(11 downto 9) = R7) --- JAL/JLR with destination R7 purged at Decode stage
+	                   or haz_jal_ex = '1'
+	              else '1';
+	flush_RR <= not (haz_lwlm_r7 or haz_beq or haz_Ex_r7 or haz_jal_ex or lw_stall or haz_jlr_ex);
+	flush_Ex <= not (haz_lwlm_r7 or haz_Ex_r7 or haz_load_dep);
+	flush_MA <= not haz_lwlm_r7;
+	----- Stalls -------------------------------------------------------------------------------------==========
+	lw_stall <= haz_lw_zero_dep;
+	lmsm_stall <= '1' when (opcode(3 downto 1)="011" and lmsm_run='1' and valid_IF='1' and flush_ID='1')
+			 else '0';
+	IF_en    <= not (lw_stall or lmsm_stall or haz_load_dep);
+	ID_en	 <= not lw_stall or haz_load_dep;
+	RR_en	 <= not haz_load_dep;
+	lw_flag_update <= '1' when (valid_RR = '0' or Zmod_RR = '0' or CZ_RR="01") and (opcode_EX = LW and valid_EX = '1') else '0'; --LW flag update when next one doesnt modify flag or is NOP
+end architecture behav;
