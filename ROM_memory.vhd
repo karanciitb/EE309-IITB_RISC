@@ -10,11 +10,6 @@ end entity;
 architecture Form of ROM_memory is
 	type regarray is array (0 to 1023) of std_logic_vector(15 downto 0); -- defining a new type
 	signal Memory : regarray := ( -- @suppress "signal Memory is never written"
-		--0      => x"6020", 1 => x"0000", 2 => x"37FF", 3 => x"2001", 4 => x"9000", 5 => x"5f9f", 6 => x"13fb", 7 => x"2038",
-		--8      => x"233a", 9 => x"2079", 10 => x"4f86", 11 => x"4f9f", 12 => x"c9c2", 13 => x"abcd", 14 => x"8e02", 15 => x"1234",
-		--16     => x"7caa", 17 => x"91c0",
-		--128    => x"ffff", 129 => x"0002", 130 => x"0000", 131 => x"0000", 132 => x"0001", 133 => x"0000",
-		--others => x"0000"
 		x"6055",
 		"0011001111111111",	--0
 						"0001001001111111",	--1

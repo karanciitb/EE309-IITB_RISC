@@ -89,6 +89,7 @@ architecture behav of datapathc is
 	signal lw_flag_update  : std_logic;
 	signal Z_LWvar		   : std_logic;
 	signal D_MA            : std_logic_vector(15 downto 0);
+	signal Addr_EXvar 	   : std_logic_vector(15 downto 0);
 	signal D_EXvar         : std_logic_vector(15 downto 0);
 	signal PCcompute_ID    : std_logic;
 	signal PCstore_ID      : std_logic;
@@ -117,7 +118,6 @@ architecture behav of datapathc is
 	signal D_MAvar         : std_logic_vector(15 downto 0);
 	signal Reg_wr_Ex       : std_logic;
 	signal Reg_wr_Exvar    : std_logic;
-	signal wenvar 		   : std_logic;
 	signal SE6 			   : std_logic_vector(15 downto 0);
 	signal PC_inc 		   : std_logic_vector(15 downto 0);
 	signal ALU_op_RR	   : std_logic;
@@ -146,14 +146,13 @@ architecture behav of datapathc is
 	signal PCcompute_RR    : std_logic;
 	signal A1_RR 		   : std_logic_vector(2 downto 0);
 	signal A2_RR 		   : std_logic_vector(2 downto 0);
-	signal fw1,fw2,zero16  : std_logic_vector(15 downto 0);
+	signal fw1,fw2 		   : std_logic_vector(15 downto 0);
 	signal rst 			   : std_logic;
 	signal useALUa_ID,useALUb_ID,useALUa_RR,useALUb_RR : std_logic;
 begin
 	-- Instruction Fetch ---------------------------------------------------------------------------------------
 	PCout <= PC;
 	rst <= not reset;
-	zero16 <= "0000000000000000";
 	rom : entity work.ROM_memory
 		port map(
 			address     => PC,
@@ -409,8 +408,8 @@ begin
 			Zmod_RR    <= '0';
 			load_type_RR<= '0';
 			lmsm_sel_RR <= '0';
-			outA_RR		<= (others => '0');
-			outB_RR		<= (others => '0');
+			--outA_RR		<= (others => '0');
+			--outB_RR		<= (others => '0');
 			lmsm_write_RR<= '0';
 			A1_RR		<= "000";
 			A2_RR 		<= "000";
@@ -431,8 +430,8 @@ begin
 			Cmod_RR	   <= Cmod_ID;
 			Zmod_RR	   <= Zmod_ID;
 			load_type_RR<= load_type_ID;
-			outA_RR		<= outA;
-			outB_RR		<= outB;
+			--outA_RR		<= outA;
+			--outB_RR		<= outB;
 			lmsm_write_RR<= lmsm_write;
 			lmsm_sel_RR <= lmsm_sel;
 			A1_RR		<= A1_ID;
@@ -440,6 +439,13 @@ begin
 			PCcompute_RR<=PCcompute_ID;
 			useALUa_RR <= useALUa_ID;
 			useALUb_RR <= useALUb_ID;
+		end if;
+		if (rst='1') then
+			outA_RR <= x"0000";
+			outB_RR <= x"0000";
+		elsif (rising_edge(clk)) then -- we need this so that outA_RR can always read from outA, bcoz in case of load dependency hazard(the inst. in WB stage) we can get a stale value
+			outA_RR <= outA;
+			outB_RR <= outB;
 		end if;
 	end process RR_PP;
 	-- Instruction Execute ------------------------------------------------------------------------------------
@@ -459,7 +465,6 @@ begin
 		else lmsm_initial_address when lmsm_sel_RR='1'
 	    else forwarded_data_1;
 	ALU_B <= SE_RR when SEa_RR = '1'
-		else zero16 when lmsm_write_RR='1'
 		else lmsm_next when lmsm_sel_RR='1'
 	     else D2;
 	alu : entity work.ALU
@@ -471,7 +476,8 @@ begin
 			Z_var      => Z_var,
 			C_var      => C_var
 		);
-	--Addr_EXvar   <= ALU_Y;
+	Addr_EXvar   <= lmsm_initial_address when lmsm_write_RR='1'
+			   else ALU_Y;
 	D_EXvar      <= D2 when opcode_RR = SW or PCstore_RR = '1' -- SW or JAL/JLR
 	                else SE_RR when opcode_RR = LHI -- LHI
 	                else ALU_Y;
@@ -513,7 +519,7 @@ begin
 				lmsm_next <= std_logic_vector(unsigned(lmsm_next)+1);
 			end if;
 			D_EX      <= D_EXvar;
-			Addr_EX   <= ALU_Y;
+			Addr_EX   <= Addr_EXvar;
 			Aw_EX     <= Aw_RR;
 			opcode_EX <= opcode_RR;
 			valid_EX  <= valid_EXvar;
@@ -556,8 +562,7 @@ begin
 	-- Register Write Back -------------------------------------------------------------------------------------
 	write <= D_MA;
 	wSel  <= Aw_MA;
-	wENvar<= Reg_wr_MA and valid_MA;
-	wEN   <= wenvar;
+	Wen   <= Reg_wr_MA and valid_MA;
 	--- PC Write
 	PC_inc  <= std_logic_vector(unsigned(PC)+1);
 	PCin  <= D_MAvar when haz_lwlm_r7='1' -- priority given to hazards at farthest stage
@@ -567,7 +572,7 @@ begin
 		else LS7 when haz_lhi_r7='1'
 		else PC_IF when haz_jal_jlr_r7='1'
 		else PC_inc;
-	wPC   <= not (lw_stall or lmsm_stall);
+	wPC   <= not (lw_stall or lmsm_stall or haz_load_dep);
 	----Hazard logic -------------------------------------------------------------------------------------------
 	haz_lwlm_r7     <= '1' when (load_type_Ex='1' and Aw_EX = R7 and valid_EX = '1') else '0'; -- LW/LM R7 detected from MA stage
 	haz_beq         <= '1' when (opcode_RR = BEQ and eq = '1' and valid_RR = '1') else '0'; -- BEQ taken;
@@ -591,7 +596,7 @@ begin
 	lmsm_stall <= '1' when (opcode(3 downto 1)="011" and lmsm_run='1' and valid_IF='1' and flush_ID='1')
 			 else '0';
 	IF_en    <= not (lw_stall or lmsm_stall or haz_load_dep or haz_jal_jlr_r7);
-	ID_en	 <= not lw_stall or haz_load_dep;
+	ID_en	 <= not (lw_stall or haz_load_dep);
 	RR_en	 <= not haz_load_dep;
 	lw_flag_update <= '1' when (valid_RR = '0' or Zmod_RR = '0') and (opcode_EX = LW and valid_EX = '1') else '0'; --LW flag update when next one doesnt modify flag or is NOP
 end architecture behav;

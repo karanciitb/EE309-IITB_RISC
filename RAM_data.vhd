@@ -17,9 +17,6 @@ begin
 	RAM_dataout <= Memory(conv_integer(address(9 downto 0)));
 	Mem_write : process(RAM_wr, clk)
 	begin
-		--if rst='1' then
-		--	Memory <= (others => (others => '0'));
-		--end if;
 		if (RAM_wr = '1') then
 			if (rising_edge(clk)) then
 				--Memory(to_integer(unsigned((address(5 downto 0))))) <= RAM_datain;
